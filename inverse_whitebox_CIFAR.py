@@ -51,7 +51,7 @@ def inverse(DATASET = 'CIFAR10', network = 'CIFAR10CNN', NIters = 500, imageWidt
     assert inverseClass < NClasses
 
     if DATASET == 'CIFAR10':
-
+        # 和训练过程一样使用相同的方法把数据加载进来
         mu = torch.tensor([0.485, 0.456, 0.406], dtype=torch.float32)
         sigma = torch.tensor([0.229, 0.224, 0.225], dtype=torch.float32)
         Normalize = transforms.Normalize(mu.tolist(), sigma.tolist())
@@ -95,19 +95,23 @@ def inverse(DATASET = 'CIFAR10', network = 'CIFAR10CNN', NIters = 500, imageWidt
                                       shuffle = False, num_workers = 1)
     trainIter = iter(trainloader)
     testIter = iter(testloader)
+    # 逆向的时候使用的测试数据集 该数据没有在该网络上训练过
     inverseIter = iter(inverseloader)
 
+    # 加载网络训练好的网络
     net = torch.load(model_dir + model_name)
     if not gpu:
         net = net.cpu()
     else:
         net = net.cuda(0)
 
+    # 切换为评估模式
     net.eval()
     print("Validate the model accuracy...")
     if validation:
         accTest = evalTest(testloader, net, gpu = gpu)
 
+    # 就是不断找，找到指定的的类，不指定类就返回下一张图片
     targetImg, _ = getImgByClass(inverseIter, C = inverseClass)
     print("targetImg.size()", targetImg.size())
 
@@ -121,6 +125,8 @@ def inverse(DATASET = 'CIFAR10', network = 'CIFAR10CNN', NIters = 500, imageWidt
         targetImg = targetImg.cuda(0)
         softmaxLayer = nn.Softmax().cuda(0)
 
+    # 这一部分主要是要获得正常推理的输出
+    # 本代码默认的layer是'conv22'
     if layer == 'prob':
         reflogits = net.forward(targetImg)
         refFeature = softmaxLayer(reflogits)
@@ -129,6 +135,7 @@ def inverse(DATASET = 'CIFAR10', network = 'CIFAR10CNN', NIters = 500, imageWidt
         refFeature[0, inverseClass] = 1
     else:
         targetLayer = net.layerDict[layer]
+        # 指定要开始的层
         refFeature = net.getLayerOutput(targetImg, targetLayer)
 
     print("refFeature.size()", refFeature.size())
@@ -138,11 +145,13 @@ def inverse(DATASET = 'CIFAR10', network = 'CIFAR10CNN', NIters = 500, imageWidt
     else:
         xGen = torch.zeros(targetImg.size(), requires_grad = True)
 
+    # 只指定一个可学习参数 xGen
     optimizer = optim.Adam(params = [xGen], lr = learningRate, eps = eps, amsgrad = AMSGrad)
 
     for i in range(NIters):
 
         optimizer.zero_grad()
+        # 本代码默认的layer是'conv22'
         if layer == 'prob':
             xlogits = net.forward(xGen)
             xFeature = softmaxLayer(xlogits)
@@ -155,11 +164,15 @@ def inverse(DATASET = 'CIFAR10', network = 'CIFAR10CNN', NIters = 500, imageWidt
             xFeature = net.getLayerOutput(xGen, targetLayer)
             featureLoss = ((xFeature - refFeature)**2).mean()
 
+        # TVLoss保证图像要平滑
         TVLoss = TV(xGen)
+        # normLoss 现在图像
         normLoss = l2loss(xGen)
 
         totalLoss = featureLoss + lambda_TV * TVLoss + lambda_l2 * normLoss #- 1.0 * conv1Loss
 
+        # retain_graph=True保持正向计算图不被销毁，以可以第二次反向传播
+        # 不知道为啥这里一定要加这个不然无法迭代第2次
         totalLoss.backward(retain_graph=True)
         optimizer.step()
 
@@ -230,6 +243,7 @@ if __name__ == '__main__':
             print("No Dataset Found")
             exit()
 
+        # 这个根据类来逆向的0-9 10个类
         for c in range(NClasses):
             inverse(DATASET = args.dataset, network = args.network, NIters = args.iters, imageWidth = imageWidth, inverseClass = c,
             imageHeight = imageHeight, imageSize = imageSize, NChannels = NChannels, NClasses = NClasses, layer = args.layer,

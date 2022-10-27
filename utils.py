@@ -86,8 +86,9 @@ def deprocess(data):
     Unnormalize = transforms.Normalize((-mu / sigma).tolist(), (1.0 / sigma).tolist())
     return clip(Unnormalize(data[0,:,:,:]).unsqueeze(0))
 
-
+# 用于测试测试集
 def evalTest(testloader, net, gpu = True):
+    # 传入的BatchSize为1000，尽量并行加快计算速度
     testIter = iter(testloader)
     acc = 0.0
     NBatch = 0

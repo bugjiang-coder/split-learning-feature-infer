@@ -301,6 +301,7 @@ class CIFAR10CNN(nn.Module):
         for layer in self.features:
             x = layer(x)
 
+        # 将图片拉伸为一个向量
         x = x.view(-1, self.feature_dims)
 
         for layer in self.classifier:
