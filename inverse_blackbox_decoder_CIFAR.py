@@ -26,6 +26,7 @@ from utils import *
 #####################
 
 
+# 通过api用于训练一个逆向的网络
 def trainDecoderDNN(DATASET = 'CIFAR10', network = 'CIFAR10CNNDecoder', NEpochs = 50, imageWidth = 32,
             imageHeight = 32, imageSize = 32*32, NChannels = 3, NClasses = 10, layer = 'ReLU22', BatchSize = 32, learningRate = 1e-3,
             NDecreaseLR = 20, eps = 1e-3, AMSGrad = True, model_dir = "checkpoints/CIFAR10/", model_name = "ckpt.pth", save_decoder_dir = "checkpoints/CIFAR10/",
@@ -33,6 +34,7 @@ def trainDecoderDNN(DATASET = 'CIFAR10', network = 'CIFAR10CNNDecoder', NEpochs 
 
     print("DATASET: ", DATASET)
 
+    # 标准操作，进行数据预处理
     if DATASET == 'CIFAR10':
         mu = torch.tensor([0.485, 0.456, 0.406], dtype=torch.float32)
         sigma = torch.tensor([0.229, 0.224, 0.225], dtype=torch.float32)
@@ -82,12 +84,15 @@ def trainDecoderDNN(DATASET = 'CIFAR10', network = 'CIFAR10CNNDecoder', NEpochs 
     if validation:
         accTest = evalTest(testloader, net, gpu = gpu)
 
+    # 默认的层是'ReLU22'
+    # 这个主要是获得输入输出的维度
     # Get dims of input/output, and construct the network
     batchX, batchY = trainIter.next()
     if gpu:
         batchX = batchX.cuda(0)
     originalModelOutput = net.getLayerOutput(batchX, net.layerDict[layer]).clone()
 
+    # 提供了几种逆向网络
     decoderNetDict = {
         'CIFAR10CNNDecoder':{
             'conv11': CIFAR10CNNDecoderconv1,
@@ -115,6 +120,7 @@ def trainDecoderDNN(DATASET = 'CIFAR10', network = 'CIFAR10CNNDecoder', NEpochs 
         lossTrain = 0.0
         accTrain = 0.0
         for i in range(NBatch):
+            # 注意：黑盒攻击中使用的是训练数据集来来构建逆向网络的，这个可能会对准确性有影响？
             try:
                 batchX, batchY = trainIter.next()
             except StopIteration:
@@ -167,7 +173,7 @@ def trainDecoderDNN(DATASET = 'CIFAR10', network = 'CIFAR10CNNDecoder', NEpochs 
     newNet.eval()
     print("Model restore done")
 
-
+# 下面是逆向部分
 def inverse(DATASET = 'CIFAR10', imageWidth = 32, inverseClass = None, imageHeight = 32,
         imageSize = 32*32, NChannels = 3, NClasses = 10, layer = 'conv11',
         model_dir = "checkpoints/CIFAR10/", model_name = "ckpt.pth", decoder_name = "CIFAR10CNNDecoderconv11.pth",
@@ -226,6 +232,8 @@ def inverse(DATASET = 'CIFAR10', imageWidth = 32, inverseClass = None, imageHeig
     testIter = iter(testloader)
     inverseIter = iter(inverseloader)
 
+    # ---上面经典加载数据集
+
 
     net = torch.load(model_dir + model_name)
     if not gpu:
@@ -264,6 +272,7 @@ def inverse(DATASET = 'CIFAR10', imageWidth = 32, inverseClass = None, imageHeig
     targetImg, _ = getImgByClass(inverseIter, C = inverseClass)
     print("targetImg.size()", targetImg.size())
 
+    # 对图像进行处理，处理方式和加载数据的时候于一样
     deprocessImg = deprocess(targetImg.clone())
 
     if not os.path.exists(save_img_dir):
@@ -272,11 +281,13 @@ def inverse(DATASET = 'CIFAR10', imageWidth = 32, inverseClass = None, imageHeig
 
     if gpu:
         targetImg = targetImg.cuda(0)
+    # 向正向推理获得中间层的信息！
     targetLayer = net.layerDict[layer]
     refFeature = net.getLayerOutput(targetImg, targetLayer)
 
     print("refFeature.size()", refFeature.size())
 
+    # 根据预测的信息反向推导
     xGen = decoderNet.forward(refFeature)
     print("MSE ", MSELossLayer(targetImg, xGen).cpu().detach().numpy())
 
@@ -338,6 +349,7 @@ if __name__ == '__main__':
             print("No Dataset Found")
             exit()
 
+        # 如果是训练模式，方法就是调用api来训练
         if args.training:
             trainDecoderDNN(DATASET = args.dataset, network = 'CIFAR10CNNDecoder', NEpochs = args.iters, imageWidth = imageWidth,
             imageHeight = imageHeight, imageSize = imageSize, NChannels = NChannels, NClasses = NClasses, layer = args.layer, BatchSize = args.batch_size, learningRate = args.learning_rate,

@@ -92,6 +92,7 @@ def trainAlternativeDNN(DATASET = 'CIFAR10', network = 'CIFAR10CNNAlternative', 
             'ReLU32': CIFAR10CNNAlternativeReLU32
         }
     }
+    # 影子网络 这里默认是conv11
     alternativeNetFunc = altnetDict[network][layer]
 
     if gpu:
@@ -101,6 +102,8 @@ def trainAlternativeDNN(DATASET = 'CIFAR10', network = 'CIFAR10CNNAlternative', 
 
     print(alternativeNet)
 
+    # 理论上应该用一个无关的相似数据集来构建
+    # 这里用训练数据集来来构建逆向网络的，这个可能会对准确性有影响？
     # Get dims of input/output, and construct the network
     batchX, batchY = trainIter.next()
     if gpu:
@@ -108,6 +111,7 @@ def trainAlternativeDNN(DATASET = 'CIFAR10', network = 'CIFAR10CNNAlternative', 
 
     edgeOutput = alternativeNet.forward(batchX)
 
+    # 后半段网络的推理
     if gpu:
         cloudOuput = net.forward_from(edgeOutput, layer).clone()
     else:
@@ -154,13 +158,16 @@ def trainAlternativeDNN(DATASET = 'CIFAR10', network = 'CIFAR10CNNAlternative', 
 
             optimizer.zero_grad()
 
+            # 前一半网络
             edgeOutput = alternativeNet.forward(batchX).clone()
+            # 后一半网络
             cloudOuput = net.forward_from(edgeOutput, layer)
 
             featureLoss = CrossEntropyLossLayer(cloudOuput, batchY)
 
             totalLoss = featureLoss
             totalLoss.backward()
+            # 只更新前一半网络的参数
             optimizer.step()
 
             lossTrain += totalLoss.cpu().detach().numpy() / NBatch
@@ -197,6 +204,7 @@ def trainAlternativeDNN(DATASET = 'CIFAR10', network = 'CIFAR10CNNAlternative', 
     print("Model restore done")
 
 
+# 这里用的方法和白盒攻击一样
 def inverse(DATASET = 'CIFAR10', NIters = 500, imageWidth = 32, inverseClass = None,
         imageHeight = 32, imageSize = 32*32, NChannels = 3, NClasses = 10, layer = 'ReLU2',
         learningRate = 1e-3, NDecreaseLR = 20, eps = 1e-3, lambda_TV = 1e3, lambda_l2 = 1.0,

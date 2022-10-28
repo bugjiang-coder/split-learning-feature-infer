@@ -1519,12 +1519,14 @@ class CIFAR10CNNDecoderconv1(nn.Module):
         return x
 
 
+# 这个是一个逆向的网络
 class CIFAR10CNNDecoderReLU22(nn.Module):
     def __init__(self, NChannels):
         super(CIFAR10CNNDecoderReLU22, self).__init__()
 
         self.layerDict = collections.OrderedDict()
 
+        # 这个是逆卷积结构
         self.deconv11 = nn.ConvTranspose2d(
             in_channels = 128,
             out_channels = 64,
